@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Gamedev Canvas Workshop</title>
+	<style type="text/css">
+		*{ padding: 0; margin: 0; }
+		canvas { background: #eee; display: block; margin: 0 auto; }
+	</style>
+</head>
+<body>
+	<canvas id="myCanvas" width="480" height="320"></canvas>
+	<script type="text/javascript">
+		/*para que se visualize el grafico en canvas primero se hace referencia a el*/
+		var canvas = document.getElementById("myCanvas"); //guardando una referencia al elemento canvas
+		var ctx = canvas.getContext("2d"); // guardando el contexto de graficos 2D que es lo que utiliza para dibujar.
+
+		ctx.beginPath();
+		ctx.rect(120, 40, 50, 50);
+		/*los 2 primeros especifican las coordenadas de la esquina superior izquierda del
+		rectangulo en el canvas y los otros dos sirven para indicar el ancho y alto */
+		ctx.fillStyle = "Yellow";
+		ctx.fill();
+		ctx.closePath();
+
+		ctx.beginPath();
+		ctx.arc(240, 40, 50, 0, Math.PI*2, false);
+		/* primero son las coordenadas x e y del centro del arco, luego el radio del arco
+		los angulos inicial y final en radianes, la direccion que se dibujara
+		(false para seguir el sentido de las agujas del reloj)
+		este es opcional
+		*/
+		ctx.fillStyle = "red";
+		ctx.fill();
+		ctx.closePath();
+
+
+		ctx.beginPath();
+		ctx.rect(160, 10, 100, 40);
+		ctx.strokeStyle = "rgba(0, 0, 255, 0.5)";
+		/*dibuja un rectangulo vacioi con el perimetro azul, gracias al canal alpha
+		de la funcion rgba() que es el cuarto valor, el color azul*/
+		ctx.stroke();
+		ctx.closePath();
+	</script>
+</body>
+</html>
