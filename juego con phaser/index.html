@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Gamedev Phaser Workshop</title>
+	<!-- reseteando los valores de margin y padding de todo el documento-->
+	<style type="text/css">* {padding: 0; margin: 0; }</style>
+		<!--se baja de la pagina de phaser es la ver 2 porque el tuto dice que no funca con la 3-->
+	<script type="text/javascript" src="js/phaser.min.js"></script> 
+</head>
+<body>
+	<script type="text/javascript">
+		/* el elemento de canvas es generado automaticamnte por el framework con la instruccion
+		Phaser.Game los primeros parametros son ancho y alto, el siguiente parametro son tres opciones
+		AUTO, CANVAS Y WEBGL, AUTO deja decidir a Phaser cual de los dos metodos de render es 
+		mejor utilizar, WEBGL lo usa si esta disponible en el navegador de lo contrario utiliza
+		CANVAS 2D. El siguiente es un identificador del canvas, para renderizar el que ya existe en la pagina, se dejo NULL para que Phaser cree el suyo. Y el ultimo parametro son los nombres de las 3 funciones claves de Phaser que lee, inicia y actualiza el loop del juego en cada frame, se usaron los mismos nombres para que este mas limpio */
+		/*PRELOAD se ocupa de cargar las imagenes, sonidos, fondos, etc
+		CREATE se ejectuta una vez cuando todo esta cargado y listo
+		UPDATE es ejecutado en cada frame*/
+		var game = new Phaser.Game(480, 320, Phaser.CANVAS, null, {
+			preload: preload, create: create, update: update
+		});
+		var ball;
+		var paddle;
+		var bricks;
+		var newBrick;
+		var brickInfo;
+		//variables para el score
+		var scoreText;
+		var score = 0;
+
+		function preload(){
+			/*para hacer que el juego se coloque de acuerdo al tamaño de la pantalla
+			automaticamente. scaleMode tiene diferentes opciones de escalado:
+			NO_SCALE- nada es escalado
+			EXACT_FIT- llena todo el espacio disponible, tanto vertical como horizontalmente
+			          sin preservar el aspecto original
+			SHOW_ALL- mantiene el aspecto original, las imagenes no seran modificadas(veritales u horizontales) como la opcion anterior, puede tener lineas negras
+			visibles en las orillas de la pantalla
+			RESIZE- crea el canvas del mismo tamaño del disponible, asi que tienes que
+			colocar los objetos dentro del juego dinamicamente, esto es mas avanzado.
+			USER_SCALE- perimte tener un escalado dinamico al gusto, tu calculas el tamaño,
+			la escala, el ratio, igual esto es mas avanzado.*/
+			game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+			//para mantener siempre centrado el canvas.
+			game.scale.pageAlignHorizontally = true;
+			game.scale.pageAlignVertically = true;
+			game.stage.backgroundColor = "#eee";
+			//cargar imagen, el primer parametro es el nombre
+			//del recurso que sera usado en el codigo, que tiene que tener el mismo nombre de 
+			//la variable ball que ya habiamos declarado, el segundo es donde esta guardada la imagen.
+			game.load.image('ball', 'img/ball.png');
+			game.load.image('paddle', 'img/paddle.png');
+			game.load.image('brick', 'img/brick.png');
+		}
+
+		function create(){
+			/*Agregando FISICA, phaser tiene 3 diferentes motores de fisicas, Arcade, P2 y Ninja, con una cuarta si la compras Box2D, aqui se usa la de Arcade. La 
+			instruccion de inicializacion tiene que ir al inicio*/
+			game.physics.startSystem(Phaser.Physics.ARCADE);
+			//mostrar la imagen que cargamos en preload, los primeros son coordenadas
+			// y la tercera es el nombre del recurso que definimos en preload
+			ball = game.add.sprite(game.world.width*0.5, game.world.height-25, 'ball');
+			//colocar el ancla en el centro de la bola
+			ball.anchor.set(0.5);
+			//habilitar la bola para el sistema de fisicas
+			game.physics.enable(ball, Phaser.Physics.ARCADE);
+			//colocar las colisiones con las paredes del canvas
+			ball.body.collideWorldBounds = true;
+			//para que la bola rebote al detectar las colisiones
+			ball.body.bounce.set(1);
+			//establecer velocidad de movimineto
+			ball.body.velocity.set(150,-150);
+			/*deshabilitando la colision de abajo para perder*/
+			game.physics.arcade.checkCollision.down = false;
+			//para ver si la pelota se salio del cuadro del canvas
+			ball.checkWorldBounds = true;
+			ball.events.onOutOfBounds.add(function(){
+				alert('Game Over!');
+				location.reload();
+			}, this);
+			/*
+			los primeros dos son la posicion, world en este caso es igual al canvas
+			*/
+			paddle = game.add.sprite(game.world.width*0.5, game.world.height -5, 'paddle');
+			// para centrar bien el paddle, se coloca la siguiente linea, la razon es que 
+			//el punto de ancla de la imagen es en la esquina superior izq con esto la centramos
+			paddle.anchor.set(0.5, 1);
+			//ponerle fisica al paddle
+			game.physics.enable(paddle, Phaser.Physics.ARCADE);
+			//funcion para dibujar los bloques
+			initBricks();
+			//colocar texto en el juego, los dos primeros son las cooredenadas, el texto
+			//que sera renderizado y la fuente de texto con que renderizarlo.
+			//se va a actualizar en la funcion de ballHitBrick
+			scoreText = game.add.text(5, 5, 'Puntuacion: 0', {font: '18px Arial', fill: '#0095DD'});
+		}
+
+		function update(){
+			//para que la colision entre la pelota y el paddle surta efecto se coloca aqui
+			game.physics.arcade.collide(ball, paddle);
+			//colision entre la bola y los ladrillos, el ultimo  parametro es opcional y
+			//es la funcion que ejecuta cuando una colision ocurre
+			game.physics.arcade.collide(ball, bricks, ballHitBrick);
+			//para que la pelota no empuje al paddle y la bola rebote
+			paddle.body.immovable = true;	
+			//para mover el paddle, se usa la entrada default del sistema, mouse o touch
+			//el paddle se actualiza en la ultima posicion del mouse o touch, para que al
+			//iniciar no haga eso se pone la segunda sentencia 
+			paddle.x = game.input.x || game.world.width*0.5;	
+		}
+
+		function initBricks(){
+			brickInfo = {
+				width: 50, //ancho y alto de cada uno
+				height: 20,
+				count: {
+					row: 3, //numero de filas y columnas
+					col: 7
+				},
+				offset: {
+					top: 50, //locacion donde deberiamos iniciar el dibujo
+					left: 60 //de los ladrillos
+				},
+				padding : 10  //el espacio entre los ladrillos
+			};
+			//creando los ladrillos
+			bricks = game.add.group();
+			for(c=0; c<brickInfo.count.col; c++){
+				for(r=0; r<brickInfo.count.row; r++){
+					var brickX = (c*(brickInfo.width+brickInfo.padding))+brickInfo.offset.left;
+					var brickY = (r*(brickInfo.height+brickInfo.padding))+brickInfo.offset.top;
+					newBrick = game.add.sprite(brickX, brickY, 'brick');
+					game.physics.enable(newBrick, Phaser.Physics.ARCADE);
+					newBrick.body.immovable = true;
+					newBrick.anchor.set(0.5);
+					bricks.add(newBrick);
+				}
+			}
+		}
+
+		function ballHitBrick(ball,brick){
+			brick.kill();
+			//actualizar el puntaje del juego
+			score += 10;
+			scoreText.setText('Puntuacion: '+score);
+			//hacer que ganes el juego
+			var count_alilve = 0;
+			//esto checa cuantos ladrillos estan "vivos", si no hay mas entonces ganas
+			for(i=0;i<bricks.children.length;i++){
+				if (bricks.children[i].alive == true){
+					count_alilve++;
+				}
+			}
+			if (count_alilve == 0) {
+				alert('Has Ganado, eres Genial!');
+				location.reload();
+			}
+		}
+	</script>
+</body>
+</html>
