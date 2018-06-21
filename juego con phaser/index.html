@@ -29,6 +29,13 @@
 		//variables para el score
 		var scoreText;
 		var score = 0;
+		//agregando vidas
+		var lives = 3;
+		var livesText;
+		var lifeLostText;
+		//para saber si hay juego en accion y el boton para ponerlo
+		var playing = false;
+		var startButton;
 
 		function preload(){
 			/*para hacer que el juego se coloque de acuerdo al tamaño de la pantalla
@@ -49,10 +56,12 @@
 			game.stage.backgroundColor = "#eee";
 			//cargar imagen, el primer parametro es el nombre
 			//del recurso que sera usado en el codigo, que tiene que tener el mismo nombre de 
-			//la variable ball que ya habiamos declarado, el segundo es donde esta guardada la imagen.
-			game.load.image('ball', 'img/ball.png');
+			//la variable paddle que ya habiamos declarado, el segundo es donde esta guardada la imagen.
 			game.load.image('paddle', 'img/paddle.png');
 			game.load.image('brick', 'img/brick.png');
+			//los ultimos dos son el ancho y alto de cada frame del sprite
+			game.load.spritesheet('ball', 'img/wobble.png', 20, 20);
+			game.load.spritesheet('button', 'img/button.png', 120, 40);
 		}
 
 		function create(){
@@ -62,6 +71,15 @@
 			//mostrar la imagen que cargamos en preload, los primeros son coordenadas
 			// y la tercera es el nombre del recurso que definimos en preload
 			ball = game.add.sprite(game.world.width*0.5, game.world.height-25, 'ball');
+			//animacion de la bola
+			/*
+			parametros, el nombre que elegimos para la animacion
+			un array difiniendo el orden en cual mostrar los frames durante la animacion
+			(son 3 imagenes, 0,1,2 son sus posiciones)
+			y por ultimo el frame rate en fps.
+			como estamos corriendo la animacion a 24 fps, y hay 9 frames, la animacion
+			se mostrara 3 veces por segundo*/
+			ball.animations.add('wobble', [0,1,0,2,0,1,0,2,0], 24);
 			//colocar el ancla en el centro de la bola
 			ball.anchor.set(0.5);
 			//habilitar la bola para el sistema de fisicas
@@ -70,16 +88,13 @@
 			ball.body.collideWorldBounds = true;
 			//para que la bola rebote al detectar las colisiones
 			ball.body.bounce.set(1);
-			//establecer velocidad de movimineto
-			ball.body.velocity.set(150,-150);
 			/*deshabilitando la colision de abajo para perder*/
 			game.physics.arcade.checkCollision.down = false;
 			//para ver si la pelota se salio del cuadro del canvas
 			ball.checkWorldBounds = true;
-			ball.events.onOutOfBounds.add(function(){
-				alert('Game Over!');
-				location.reload();
-			}, this);
+			//se llama a una funcion para el manejo de vidas y demas. el ADD causa que 
+			//la funcion sea ejecutada cada vez que el evento ocurre
+			ball.events.onOutOfBounds.add(ballLeaveScreen, this);
 			/*
 			los primeros dos son la posicion, world en este caso es igual al canvas
 			*/
@@ -91,24 +106,40 @@
 			game.physics.enable(paddle, Phaser.Physics.ARCADE);
 			//funcion para dibujar los bloques
 			initBricks();
+			//para no escribir a cada rato el estilo del texto
+			textStyle = {font: '18px Arial', fill: '#0095DD' };
 			//colocar texto en el juego, los dos primeros son las cooredenadas, el texto
 			//que sera renderizado y la fuente de texto con que renderizarlo.
 			//se va a actualizar en la funcion de ballHitBrick
-			scoreText = game.add.text(5, 5, 'Puntuacion: 0', {font: '18px Arial', fill: '#0095DD'});
+			scoreText = game.add.text(5, 5, 'Puntuacion: 0', textStyle);
+			livesText = game.add.text(game.world.width-5, 5, 'Vidas: '+lives, textStyle);
+			livesText.anchor.set(1,0);
+			lifeLostText = game.add.text(game.world.width*0.5, game.world.height*0.5, 'Vida Perdida, haz click para continuar', textStyle);
+			lifeLostText.anchor.set(0.5);
+			lifeLostText.visible = false;
+			//agregando un boton, las primeras con coordenadas, el nombre del grafico a ser mostrado,
+			//una llamda a la funcion que ejecutara cuando el boton es presionado, una referencia
+			//this a que sera ejecutado y los framse que seran usados para los eventos de
+			// sobre, fuera y presionar 
+			startButton = game.add.button(game.world.width*0.5, game.world.height*0.5, 'button', startGame, this, 1, 0, 2);
+			startButton.anchor.set(0.5);
 		}
 
 		function update(){
-			//para que la colision entre la pelota y el paddle surta efecto se coloca aqui
-			game.physics.arcade.collide(ball, paddle);
+			//para que la colision entre la pelota y el paddle surta efecto se coloca aqui, 
+			//el 3er parametro es para hacer la animacion del golpeo de la bola
+			game.physics.arcade.collide(ball, paddle, ballHitPaddle);
 			//colision entre la bola y los ladrillos, el ultimo  parametro es opcional y
 			//es la funcion que ejecuta cuando una colision ocurre
 			game.physics.arcade.collide(ball, bricks, ballHitBrick);
 			//para que la pelota no empuje al paddle y la bola rebote
 			paddle.body.immovable = true;	
-			//para mover el paddle, se usa la entrada default del sistema, mouse o touch
-			//el paddle se actualiza en la ultima posicion del mouse o touch, para que al
-			//iniciar no haga eso se pone la segunda sentencia 
-			paddle.x = game.input.x || game.world.width*0.5;	
+			if (playing){
+				//para mover el paddle, se usa la entrada default del sistema, mouse o touch
+				//el paddle se actualiza en la ultima posicion del mouse o touch, para que al
+				//iniciar no haga eso se pone la segunda sentencia 
+				paddle.x = game.input.x || game.world.width*0.5;	
+			}
 		}
 
 		function initBricks(){
@@ -141,22 +172,59 @@
 		}
 
 		function ballHitBrick(ball,brick){
-			brick.kill();
+			//animacion para que desaparescan los ladrillos
+			//primero se especifica que probpiedad va a ser interpolada o modificada
+			var killTween = game.add.tween(brick.scale);
+			//el to implica el estado del objeto al final de la interpolacion
+			killTween.to({x:0,y:0}, 200, Phaser.Easing.Linear.None);
+			//el evento onComplete se usa para definir la funcion al terminar la interpolacion
+			killTween.onComplete.addOnce(function(){
+				brick.kill();
+			}, this);
+			//comienza la interpolacion.
+			killTween.start();
 			//actualizar el puntaje del juego
 			score += 10;
 			scoreText.setText('Puntuacion: '+score);
 			//hacer que ganes el juego
-			var count_alilve = 0;
-			//esto checa cuantos ladrillos estan "vivos", si no hay mas entonces ganas
-			for(i=0;i<bricks.children.length;i++){
-				if (bricks.children[i].alive == true){
-					count_alilve++;
-				}
-			}
-			if (count_alilve == 0) {
-				alert('Has Ganado, eres Genial!');
+			if (score === brickInfo.count.row*brickInfo.count.col * 10){
+				alert('Ganaste el Juego, eres genial!');
 				location.reload();
 			}
+		}
+
+		function ballLeaveScreen() {
+			lives--;
+			if(lives){
+				livesText.setText('Vidas: ' + lives);
+				lifeLostText.visible = true;
+				ball.reset(game.world.width*0.5, game.world.height-25);
+				paddle.reset(game.world.width*0.5, game.world.height-5);
+				//se usa cuando quieres que la funcion se ejecute solo una vez, solo 
+				//se quiere que muestre el mensaje una vez.
+				game.input.onDown.addOnce(function(){
+					lifeLostText.visible = false;
+					ball.body.velocity.set(150,-150);
+				}, this);
+			}
+			else {
+				alert('Perdiste! :(');
+				location.reload();
+			}
+		}
+
+		function ballHitPaddle(ball, paddle){
+			//animacion de la bola al golpear
+			ball.animations.play('wobble');
+			//para cambiar el angulo con que sale disparada la bola
+			ball.body.velocity.x = -1*5*(paddle.x-ball.x);
+		}
+
+		function startGame(){
+			startButton.destroy();
+			//establece la velocidad de movimiento de la bola.
+			ball.body.velocity.set(150, -150);
+			playing = true;
 		}
 	</script>
 </body>
